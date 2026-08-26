@@ -3,31 +3,97 @@ from .brand import analyze_brand, trusted_domain_set
 from .features import extract_features
 from .lexical import analyze_lexical
 from .risk import score_risk
+from .threat_intel import lookup_threat_intel, is_globally_trusted
 from .url_utils import normalize_url
+from .network_intel import collect_network_intel
 
 
 def analyze_url(url: str) -> dict:
     """
-    Runs the CipherX explainable rule-based URL detection pipeline.
+    Runs the CipherX explainable multi-layered URL detection pipeline:
+    1. Threat Intelligence Database & Live Feed Verification
+    2. Feature Extraction & Lexical Analysis
+    3. Adversarial Deception & Userinfo Analysis
+    4. Brand Impersonation & Typosquatting Analysis
+    5. Scoring & Explainable Reasoning Engine
     """
     normalized = normalize_url(url)
     features = extract_features(normalized)
 
+    # 1. Threat Intelligence Feeds & IOC Lookups
+    threat_intel_signals, threat_intel_match = lookup_threat_intel(
+        normalized.normalized_url,
+        normalized.hostname,
+        normalized.registrable_domain,
+    )
+
+    # 2. Lexical & Structural Analysis
     lexical_signals = analyze_lexical(normalized, features)
+
+    # 3. Adversarial Analysis
     adversarial_signals, adversarial_findings = analyze_adversarial(
         normalized,
         features,
         trusted_domain_set(),
     )
+
+    # 4. Brand Impersonation Analysis
     brand_signals, brand_analysis = analyze_brand(normalized, features)
     adversarial_findings.extend(_subdomain_deception_findings(brand_signals))
 
-    signals = _deduplicate_signals(
-        lexical_signals
+    contextual_lexical_signals = {
+        "embedded_url",
+        "brand_reference_in_path",
+        "url_shortener",
+        "form_or_marketing_tracking",
+        "abused_hosting_platform",
+        "abused_platform_sensitive_context",
+        "opaque_hosted_resource",
+        "high_risk_file_extension",
+    }
+    has_contextual_lexical_evidence = any(
+        signal.get("signal") in contextual_lexical_signals for signal in lexical_signals
+    )
+
+    # Suppress weak lexical noise on verified domains only when no stronger evidence exists.
+    if (
+        is_globally_trusted(normalized.registrable_domain)
+        and not threat_intel_match
+        and not adversarial_findings
+        and not has_contextual_lexical_evidence
+    ):
+        brand_signals = []
+        lexical_signals = []
+
+    # 5. Aggregate All Detected Evidence Signals
+    all_signals = (
+        threat_intel_signals
         + adversarial_signals
         + brand_signals
+        + lexical_signals
     )
+    signals = _deduplicate_signals(all_signals)
+
     risk_score, classification, confidence = score_risk(signals)
+
+    # Add verified whitelist indicator if trusted domain and no stronger evidence survived.
+    if (
+        is_globally_trusted(normalized.registrable_domain)
+        and not threat_intel_match
+        and not adversarial_findings
+        and not signals
+    ):
+        risk_score = 0
+        classification = "LOW"
+        confidence = 0.98
+
+    # Attach threat intelligence match metadata into features for dashboard display
+    features["trusted_base_domain"] = is_globally_trusted(normalized.registrable_domain)
+    if threat_intel_match:
+        features["threat_intel_match"] = threat_intel_match
+
+    # Collect Network Intelligence by default
+    network_info = collect_network_intel(normalized)
 
     return {
         "url": normalized.original_url,
@@ -39,7 +105,8 @@ def analyze_url(url: str) -> dict:
         "features": features,
         "adversarial_findings": adversarial_findings,
         "brand_analysis": brand_analysis,
-        "explanation": _build_explanation(classification, signals),
+        "network": network_info,
+        "explanation": _build_explanation(classification, signals, threat_intel_match),
     }
 
 
@@ -57,9 +124,14 @@ def _deduplicate_signals(signals):
     return deduped
 
 
-def _build_explanation(classification, signals):
+def _build_explanation(classification, signals, threat_intel_match=None):
+    if threat_intel_match:
+        source = threat_intel_match.get("source", "Global Threat Feeds")
+        threat_type = threat_intel_match.get("threat_type", "Malicious IOC")
+        return f"CRITICAL risk: Confirmed malicious threat signature verified in {source} ({threat_type})."
+
     if not signals:
-        return "No meaningful phishing indicators were detected by the current rule-based engine."
+        return "No meaningful phishing or threat indicators detected from the URL alone."
 
     strongest = sorted(signals, key=lambda item: item.get("score", 0), reverse=True)[:3]
     reasons = "; ".join(signal["reason"] for signal in strongest)

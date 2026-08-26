@@ -1,11 +1,51 @@
 @import "tailwindcss";
 
+:root {
+  --color-vt-900: #101625;
+  --color-vt-800: #1a2235;
+  --color-vt-700: #252d43;
+  --color-vt-accent: #2e60ff;
+  --color-vt-text: #c0c6d4;
+  --color-vt-heading: #ffffff;
+  --color-vt-subtle: #0a0f18;
+}
+
+html.light {
+  --color-vt-900: #f1f5f9;
+  --color-vt-800: #ffffff;
+  --color-vt-700: #cbd5e1;
+  --color-vt-accent: #2563eb;
+  --color-vt-text: #334155;
+  --color-vt-heading: #0f172a;
+  --color-vt-subtle: #e2e8f0;
+}
+
 @theme {
-  --color-dark-900: #0f172a;
-  --color-dark-800: #1e293b;
-  --color-dark-700: #334155;
+  --color-vt-900: var(--color-vt-900);
+  --color-vt-800: var(--color-vt-800);
+  --color-vt-700: var(--color-vt-700);
+  --color-vt-accent: var(--color-vt-accent);
+  --color-vt-text: var(--color-vt-text);
+  --color-vt-heading: var(--color-vt-heading);
+  --color-vt-subtle: var(--color-vt-subtle);
 }
 
 body {
-  @apply bg-dark-900 text-slate-200 antialiased;
+  background-color: var(--color-vt-900);
+  color: var(--color-vt-text);
+  @apply antialiased transition-colors duration-200;
+}
+
+/* Ensure text-vt-heading is crisp and dark in light mode, bright white in dark mode */
+.text-vt-heading {
+  color: var(--color-vt-heading);
+}
+
+/* Light mode overrides for general text elements */
+html.light .text-vt-heading,
+html.light h1:not(.keep-white),
+html.light h2:not(.keep-white),
+html.light h3:not(.keep-white),
+html.light h4:not(.keep-white) {
+  color: #0f172a;
 }

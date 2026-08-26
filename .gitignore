@@ -30,3 +30,6 @@ Thumbs.db
 # Python test/cache
 .pytest_cache/
 .mypy_cache/
+
+# Archives
+*.zip

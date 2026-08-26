@@ -22,7 +22,21 @@ def analyze_brand(normalized, features):
         official_match = analyzed_domain == official_domain or normalized.hostname.endswith(f".{official_domain}")
         domain_similarity = _best_similarity(analyzed_root, official_root)
         token_similarity = max((_best_similarity(token, official_root) for token in host_tokens), default=0.0)
+        brand_embedded_in_domain = (
+            official_root in analyzed_root
+            and analyzed_root != official_root
+            and len(official_root) >= 5
+        )
         brand_in_subdomain = bool(subdomain) and _contains_domain_sequence(subdomain, official_domain)
+        brand_embedded_in_subdomain = (
+            bool(subdomain)
+            and not official_match
+            and any(
+                official_root in token
+                and token != official_root
+                for token in _tokens(subdomain)
+            )
+        )
         similarity = max(domain_similarity, token_similarity)
 
         result = {
@@ -32,6 +46,8 @@ def analyze_brand(normalized, features):
             "similarity_score": round(similarity, 3),
             "official_domain_matches": official_match,
             "brand_in_subdomain": brand_in_subdomain,
+            "brand_embedded_in_domain": brand_embedded_in_domain,
+            "brand_embedded_in_subdomain": brand_embedded_in_subdomain,
             "supporting_evidence": [],
         }
 
@@ -66,6 +82,27 @@ def analyze_brand(normalized, features):
                         "official_domain": official_domain,
                         "analyzed_domain": analyzed_domain,
                         "similarity": round(similarity, 3),
+                    },
+                )
+            )
+        elif (brand_embedded_in_domain or brand_embedded_in_subdomain) and (
+            features["suspicious_tld"]
+            or features["num_hyphens"] > 0
+            or features["num_digits"] > 0
+        ):
+            result["supporting_evidence"].append(
+                "Trusted brand name is embedded in an unrelated domain with suspicious URL traits."
+            )
+            signals.append(
+                make_signal(
+                    "brand_name_in_untrusted_domain",
+                    "high",
+                    RISK_WEIGHTS["brand_name_in_untrusted_domain"],
+                    "A trusted brand name appears inside an unrelated hostname with suspicious URL traits.",
+                    {
+                        "brand": reference["brand"],
+                        "official_domain": official_domain,
+                        "analyzed_domain": analyzed_domain,
                     },
                 )
             )

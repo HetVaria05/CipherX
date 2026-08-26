@@ -16,7 +16,7 @@ def classify(score):
 
 def confidence(score, signals):
     if not signals:
-        return 0.78
+        return 0.55
 
     severity_values = {"low": 0.04, "medium": 0.07, "high": 0.11, "critical": 0.16}
     evidence_strength = sum(severity_values.get(signal.get("severity"), 0.04) for signal in signals)

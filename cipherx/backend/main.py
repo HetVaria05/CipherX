@@ -24,10 +24,10 @@ async def root():
         "endpoints": {
             "health": "/api/health",
             "analyze": "/api/analyze (POST)",
+            "advanced_analyze": "/api/advanced-analyze (POST)",
             "documentation": "/docs"
         }
       }
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
-
