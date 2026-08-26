@@ -33,3 +33,7 @@ Thumbs.db
 
 # Archives
 *.zip
+
+# Agent Handover Workspace (Local Context Only)
+AGENTS_WORKSPACE.md/
+AGENTS_WORKSPACE.md
