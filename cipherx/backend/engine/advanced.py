@@ -138,6 +138,19 @@ def _advanced_signals(virustotal: dict, network: dict) -> list[dict]:
             )
         )
 
+    content_scan = network.get("content_scan", {}) if isinstance(network, dict) else {}
+    if isinstance(content_scan, dict):
+        for finding in content_scan.get("findings", []) or []:
+            signals.append(
+                make_signal(
+                    finding.get("signal", "content_scan_finding"),
+                    finding.get("severity", "low"),
+                    finding.get("score", 0),
+                    finding.get("reason", "Fetched page content produced a suspicious signal."),
+                    finding.get("details", {}),
+                )
+            )
+
     return signals
 
 

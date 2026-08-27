@@ -50,6 +50,7 @@ export default function ResultDashboard({ result }) {
   } = result;
 
   const threatIntelMatch = features?.threat_intel_match;
+  const networkData = result.network || (result.advanced && result.advanced.network);
 
   return (
     <div className="w-full max-w-4xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 text-vt-text">
@@ -274,7 +275,7 @@ export default function ResultDashboard({ result }) {
         )}
 
         {/* Network & Infrastructure Intel */}
-        {(result.network || (result.advanced && result.advanced.network)) && (result.network || result.advanced.network).status !== 'disabled' && (
+        {networkData && networkData.status !== 'disabled' && (
           <div className="bg-vt-800 p-6 rounded-2xl border border-vt-700 shadow-lg">
             <h3 className="text-md font-bold text-vt-heading mb-4 flex items-center gap-2">
               <Network className="w-5 h-5 text-vt-accent" />
@@ -285,13 +286,13 @@ export default function ResultDashboard({ result }) {
               <div className="bg-vt-900/80 p-4 rounded-xl border border-vt-700/60 space-y-2">
                 <span className="text-vt-text uppercase font-bold tracking-wider block">{t('res_net_dns')}</span>
                 <p className="text-vt-heading font-mono">
-                  {(result.network || result.advanced.network).dns?.ips?.length > 0 
-                    ? (result.network || result.advanced.network).dns.ips.join(', ')
-                    : t((result.network || result.advanced.network).dns?.summary || t('res_net_dns_none'))}
+                  {networkData.dns?.ips?.length > 0 
+                    ? networkData.dns.ips.join(', ')
+                    : t(networkData.dns?.summary || t('res_net_dns_none'))}
                 </p>
-                {(result.network || result.advanced.network).dns?.minimum_ttl !== null && (result.network || result.advanced.network).dns?.minimum_ttl !== undefined && (
+                {networkData.dns?.minimum_ttl !== null && networkData.dns?.minimum_ttl !== undefined && (
                   <span className="text-vt-text block">
-                    {t('res_net_min_ttl')}: <strong className="text-vt-heading">{(result.network || result.advanced.network).dns.minimum_ttl}s</strong>
+                    {t('res_net_min_ttl')}: <strong className="text-vt-heading">{networkData.dns.minimum_ttl}s</strong>
                   </span>
                 )}
               </div>
@@ -299,36 +300,88 @@ export default function ResultDashboard({ result }) {
               {/* TLS Certificate */}
               <div className="bg-vt-900/80 p-4 rounded-xl border border-vt-700/60 space-y-2">
                 <span className="text-vt-text uppercase font-bold tracking-wider block">{t('res_net_tls')}</span>
-                {(result.network || result.advanced.network).tls_certificate?.subject ? (
+                {networkData.tls_certificate?.subject ? (
                   <div>
-                    <p className="text-vt-heading font-mono truncate">{t('res_net_tls_sub')}: {(result.network || result.advanced.network).tls_certificate.subject}</p>
-                    <p className="text-vt-text">{t('res_net_tls_iss')}: {(result.network || result.advanced.network).tls_certificate.issuer || 'N/A'}</p>
-                    <p className="text-vt-text">{t('res_net_tls_age')}: {(result.network || result.advanced.network).tls_certificate.age_days ?? 'N/A'} {t('res_net_tls_days')}</p>
+                    <p className="text-vt-heading font-mono truncate">
+                      {t('res_net_tls_sub')}: {typeof networkData.tls_certificate.subject === 'object' ? (networkData.tls_certificate.subject.commonName || networkData.tls_certificate.subject.organizationName || JSON.stringify(networkData.tls_certificate.subject)) : String(networkData.tls_certificate.subject)}
+                    </p>
+                    <p className="text-vt-text">
+                      {t('res_net_tls_iss')}: {typeof networkData.tls_certificate.issuer === 'object' ? (networkData.tls_certificate.issuer.organizationName || networkData.tls_certificate.issuer.commonName || JSON.stringify(networkData.tls_certificate.issuer)) : (networkData.tls_certificate.issuer || 'N/A')}
+                    </p>
+                    <p className="text-vt-text">{t('res_net_tls_age')}: {networkData.tls_certificate.age_days ?? 'N/A'} {t('res_net_tls_days')}</p>
                   </div>
                 ) : (
-                  <p className="text-vt-text">{t((result.network || result.advanced.network).tls_certificate?.summary || t('res_net_tls_none'))}</p>
+                  <p className="text-vt-text">{t(networkData.tls_certificate?.summary || t('res_net_tls_none'))}</p>
                 )}
               </div>
 
               {/* WHOIS / RDAP */}
               <div className="bg-vt-900/80 p-4 rounded-xl border border-vt-700/60 space-y-2">
                 <span className="text-vt-text uppercase font-bold tracking-wider block">{t('res_net_rdap')}</span>
-                <p className="text-vt-heading">{t('res_net_rdap_reg')}: {(result.network || result.advanced.network).whois_rdap?.registrar || 'N/A'}</p>
-                <p className="text-vt-text">{t('res_net_rdap_age')}: {(result.network || result.advanced.network).whois_rdap?.age_days ? `${(result.network || result.advanced.network).whois_rdap.age_days} ${t('res_net_tls_days')}` : 'N/A'}</p>
+                <p className="text-vt-heading">{t('res_net_rdap_reg')}: {networkData.whois_rdap?.registrar || 'N/A'}</p>
+                <p className="text-vt-text">{t('res_net_rdap_age')}: {networkData.whois_rdap?.age_days ? `${networkData.whois_rdap.age_days} ${t('res_net_tls_days')}` : 'N/A'}</p>
               </div>
 
               {/* Redirects */}
               <div className="bg-vt-900/80 p-4 rounded-xl border border-vt-700/60 space-y-2">
                 <span className="text-vt-text uppercase font-bold tracking-wider block">{t('res_net_trail')}</span>
                 <p className="text-vt-heading">
-                  {t('res_net_hops')}: {(result.network || result.advanced.network).redirect_chain?.length || 0}
+                  {t('res_net_hops')}: {networkData.redirect_chain?.length || 0}
                 </p>
-                {(result.network || result.advanced.network).redirect_chain?.length > 0 && (
+                {networkData.redirect_chain?.length > 0 && (
                   <div className="space-y-1 font-mono text-[11px] text-vt-accent break-all">
-                    {(result.network || result.advanced.network).redirect_chain.map((hop, idx) => (
+                    {networkData.redirect_chain.map((hop, idx) => (
                       <div key={idx}>&rarr; {hop.url} ({hop.status_code})</div>
                     ))}
                   </div>
+                )}
+              </div>
+
+              {/* Content Scan */}
+              <div className="bg-vt-900/80 p-4 rounded-xl border border-vt-700/60 space-y-2 md:col-span-2">
+                <span className="text-vt-text uppercase font-bold tracking-wider block">{t('res_net_content')}</span>
+                {networkData.content_scan?.status === 'ok' ? (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <p className="text-vt-heading font-semibold truncate">
+                        {networkData.content_scan.title || 'Untitled page'}
+                      </p>
+                      <p className="text-vt-text text-[11px] leading-relaxed">
+                        {t(networkData.content_scan.summary || 'Content scan completed.')}
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-[11px]">
+                      <div className="rounded-lg border border-vt-700/60 bg-vt-900/70 p-2">
+                        <span className="block text-vt-text uppercase tracking-wider">Forms</span>
+                        <span className="text-vt-heading font-mono text-sm">{networkData.content_scan.form_count ?? 0}</span>
+                      </div>
+                      <div className="rounded-lg border border-vt-700/60 bg-vt-900/70 p-2">
+                        <span className="block text-vt-text uppercase tracking-wider">Password fields</span>
+                        <span className="text-vt-heading font-mono text-sm">{networkData.content_scan.password_field_count ?? 0}</span>
+                      </div>
+                      <div className="rounded-lg border border-vt-700/60 bg-vt-900/70 p-2">
+                        <span className="block text-vt-text uppercase tracking-wider">External scripts</span>
+                        <span className="text-vt-heading font-mono text-sm">{networkData.content_scan.external_script_count ?? 0}</span>
+                      </div>
+                      <div className="rounded-lg border border-vt-700/60 bg-vt-900/70 p-2">
+                        <span className="block text-vt-text uppercase tracking-wider">Meta refresh</span>
+                        <span className="text-vt-heading font-mono text-sm">{networkData.content_scan.meta_refresh_count ?? 0}</span>
+                      </div>
+                    </div>
+                    {networkData.content_scan.findings?.length > 0 && (
+                      <div className="lg:col-span-2 flex flex-wrap gap-2 pt-1">
+                        {networkData.content_scan.findings.map((finding, idx) => (
+                          <span key={idx} className="inline-flex items-center gap-1 px-2 py-1 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-300 text-[10px] font-mono uppercase tracking-wider">
+                            {finding.signal.replace(/_/g, ' ')}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-vt-text text-[11px] leading-relaxed">
+                    {t(networkData.content_scan?.summary || t('res_net_content_none'))}
+                  </p>
                 )}
               </div>
             </div>

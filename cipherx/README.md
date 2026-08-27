@@ -7,7 +7,7 @@ This is the **BASE WEB APPLICATION** built as a modular foundation for the hacka
 ## What was built
 1. **React Frontend (Vite):** A dark-mode, professional cybersecurity dashboard utilizing Tailwind CSS and Lucide icons. Includes a prominent URL analysis form, One-Click Verification, loading states, error handling, and a comprehensive result display (Risk score, confidence, classification, signals, adversarial findings, extracted features, and brand analysis).
 2. **FastAPI Backend:** A robust API that serves the frontend, built with Python and FastAPI. Includes input validation, CORS setup, structured JSON responses, and a health check endpoint.
-3. **Detection Engine Stub:** An isolated mock engine module where the real detection intelligence will eventually be integrated.
+3. **Detection Engine:** A modular URL and page-enrichment engine that performs rule-based phishing, brand impersonation, threat feed, and content inspection checks.
 
 ## Project Structure
 ```
@@ -23,7 +23,7 @@ cipherx/
 ├── backend/              # FastAPI application
 │   ├── api/              # API router and endpoints
 │   ├── engine/           # Detection engine boundary
-│   │   ├── detector.py   # Mock engine (REPLACE THIS LATER)
+│   │   ├── detector.py   # Main detection pipeline and scoring entry point
 │   ├── tests/            # API health and behavior tests
 │   ├── main.py           # FastAPI entrypoint
 │   └── requirements.txt
@@ -60,5 +60,5 @@ npm run dev
   Located at `backend/engine/detector.py` -> `analyze_url(url)`. This is where the AI team will plug in `lexical.py`, `adversarial.py`, and the final `aggregator.py`.
 - **Where is the API contract defined?**
   Located at `backend/api/routes.py`. The `AnalyzeRequest` and `AnalyzeResponse` Pydantic models define the exact expected JSON structures.
-- **What is temporary/mock?**
-  The logic inside `backend/engine/detector.py` is entirely a mock implementation for demonstration purposes. It hardcodes responses based on simple string matching (e.g., triggering critical adversarial findings if an `@` symbol is present, or high-risk brand impersonation if `typ` is in the URL). **This file must be replaced by the team's real detection logic.**
+- **What is implemented now?**
+  The backend now uses real URL normalization, lexical heuristics, brand similarity checks, threat-feed matching, safe network enrichment, and page content inspection. The strongest remaining gap is broader browser-grade rendering and deeper sandboxed JavaScript execution.

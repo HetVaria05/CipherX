@@ -41,6 +41,23 @@ def analyze_url(url: str) -> dict:
     brand_signals, brand_analysis = analyze_brand(normalized, features)
     adversarial_findings.extend(_subdomain_deception_findings(brand_signals))
 
+    # 5. Offline Machine Learning Classifier (Zero API Cost)
+    from .ml_classifier import predict_ml_risk
+    from .signals import make_signal
+    ml_signals = []
+    ml_result = predict_ml_risk(features)
+    if ml_result and ml_result.get("score", 0) > 0 and not is_globally_trusted(normalized.registrable_domain):
+        ml_signals.append(
+            make_signal(
+                "ml_suspicious_url_pattern",
+                ml_result["severity"],
+                ml_result["score"],
+                f"Offline ML classifier flagged URL features as suspicious (probability: {int(ml_result['ml_probability'] * 100)}%).",
+                ml_result,
+            )
+        )
+        features["ml_prediction"] = ml_result
+
     contextual_lexical_signals = {
         "embedded_url",
         "brand_reference_in_path",
@@ -64,17 +81,20 @@ def analyze_url(url: str) -> dict:
     ):
         brand_signals = []
         lexical_signals = []
+        ml_signals = []
 
-    # 5. Aggregate All Detected Evidence Signals
+    # 6. Aggregate All Detected Evidence Signals
     all_signals = (
         threat_intel_signals
         + adversarial_signals
         + brand_signals
         + lexical_signals
+        + ml_signals
     )
     signals = _deduplicate_signals(all_signals)
 
     risk_score, classification, confidence = score_risk(signals)
+
 
     # Add verified whitelist indicator if trusted domain and no stronger evidence survived.
     if (

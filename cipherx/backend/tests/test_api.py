@@ -12,8 +12,41 @@ client = TestClient(app)
 
 
 @pytest.fixture(autouse=True)
-def disable_live_urlhaus(monkeypatch):
+def disable_live_network(monkeypatch):
     monkeypatch.setattr("engine.threat_intel.query_urlhaus_api", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        "engine.network_intel.collect_dns_intel",
+        lambda *args, **kwargs: {
+            "status": "ok",
+            "hostname": "example.com",
+            "addresses": ["93.184.216.34"],
+            "a_records": ["93.184.216.34"],
+            "aaaa_records": [],
+            "ns_records": [],
+            "mx_records": [],
+            "minimum_ttl": 3600,
+            "summary": "DNS resolved successfully.",
+        },
+    )
+    monkeypatch.setattr(
+        "engine.network_intel.collect_tls_certificate",
+        lambda *args, **kwargs: {"status": "blocked", "summary": "TLS probe disabled in tests."},
+    )
+    monkeypatch.setattr(
+        "engine.network_intel.collect_rdap_domain",
+        lambda *args, **kwargs: {"status": "blocked", "summary": "RDAP lookup disabled in tests."},
+    )
+    monkeypatch.setattr("engine.network_intel.collect_redirect_chain", lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        "engine.network_intel._fetch_page_sample",
+        lambda *args, **kwargs: {
+            "status": "ok",
+            "url": "https://example.com/",
+            "content_type": "text/html",
+            "body": "<html><head><title>Example</title></head><body><h1>Welcome</h1></body></html>",
+            "truncated": False,
+        },
+    )
 
 
 def test_health_check():
@@ -202,3 +235,35 @@ def test_advanced_analyze_endpoint():
     assert "advanced" in data
     assert "signals" in data
     assert "risk_score" in data
+
+
+def test_content_scan_detects_login_form():
+        from engine.network_intel import collect_content_scan
+        from engine.url_utils import normalize_url
+        from engine import network_intel
+
+        html = """
+        <html>
+            <head><title>Secure Login</title></head>
+            <body>
+                <form action="/session">
+                    <input type="text" name="username" />
+                    <input type="password" name="password" />
+                    <button>Sign in</button>
+                </form>
+            </body>
+        </html>
+        """
+
+        network_intel._fetch_page_sample = lambda *args, **kwargs: {
+                "status": "ok",
+                "url": "https://example.com/login",
+                "content_type": "text/html",
+                "body": html,
+                "truncated": False,
+        }
+
+        result = collect_content_scan(normalize_url("https://example.com/login"))
+        assert result["status"] == "ok"
+        assert result["password_field_count"] == 1
+        assert any(finding["signal"] == "credential_form_detected" for finding in result["findings"])

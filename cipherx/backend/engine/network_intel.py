@@ -6,16 +6,35 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
+from html.parser import HTMLParser
 
-from .url_utils import get_registrable_domain, normalize_url
+from .url_utils import normalize_url
 
 
 NETWORK_TIMEOUT_SECONDS = 5
+CONTENT_FETCH_TIMEOUT_SECONDS = 4
+MAX_CONTENT_BYTES = 65536
+CONTENT_SUSPICIOUS_TERMS = {
+    "account",
+    "auth",
+    "bank",
+    "credential",
+    "login",
+    "payment",
+    "password",
+    "recovery",
+    "signin",
+    "security",
+    "verification",
+    "verify",
+    "wallet",
+}
 
 
 def collect_network_intel(normalized, include_redirects: bool = True) -> dict:
     safety = evaluate_network_safety(normalized.hostname)
     dns = collect_dns_intel(normalized.hostname, normalized.registrable_domain)
+    content_scan = collect_content_scan(normalized) if safety["safe_for_network_probe"] else _blocked("Content probe blocked by host safety policy.")
 
     result = {
         "safety": safety,
@@ -23,16 +42,93 @@ def collect_network_intel(normalized, include_redirects: bool = True) -> dict:
         "tls_certificate": collect_tls_certificate(normalized.hostname) if safety["safe_for_network_probe"] else _blocked("TLS probe blocked by host safety policy."),
         "whois_rdap": collect_rdap_domain(normalized.registrable_domain) if safety["safe_for_network_probe"] else _blocked("RDAP lookup blocked by host safety policy."),
         "redirect_chain": [],
-        "content_scan": {
-            "status": "not_fetched",
-            "summary": "CipherX advanced scan does not download page bodies; use reputation, redirect, DNS, TLS, and RDAP metadata instead.",
-        },
+        "content_scan": content_scan,
     }
 
     if include_redirects:
         result["redirect_chain"] = collect_redirect_chain(normalized.normalized_url)
 
     return result
+
+
+def collect_content_scan(normalized) -> dict:
+    sample = _fetch_page_sample(normalized.normalized_url)
+    if sample.get("status") != "ok":
+        return sample
+
+    parser = _ContentIntelParser()
+    parser.feed(sample["body"])
+
+    title = " ".join(part.strip() for part in parser.title_parts if part.strip()).strip()
+    visible_text = " ".join(parser.visible_text).lower()
+    form_actions = " ".join(parser.form_actions).lower()
+    combined_text = f"{title.lower()} {visible_text} {form_actions}".strip()
+
+    suspicious_terms = sorted(term for term in CONTENT_SUSPICIOUS_TERMS if term in combined_text)
+    findings = []
+
+    if parser.password_field_count and (parser.form_count or suspicious_terms):
+        findings.append(
+            {
+                "signal": "credential_form_detected",
+                "severity": "high",
+                "score": 22,
+                "reason": "Fetched page contains password fields or login form markers.",
+                "details": {
+                    "form_count": parser.form_count,
+                    "password_field_count": parser.password_field_count,
+                },
+            }
+        )
+
+    if suspicious_terms:
+        findings.append(
+            {
+                "signal": "credential_language_detected",
+                "severity": "medium",
+                "score": 12,
+                "reason": "Fetched page contains credential, payment, or verification language.",
+                "details": {"suspicious_terms": suspicious_terms},
+            }
+        )
+
+    if parser.meta_refresh_count:
+        findings.append(
+            {
+                "signal": "meta_refresh_redirect",
+                "severity": "medium",
+                "score": 10,
+                "reason": "Fetched page uses a meta refresh redirect.",
+                "details": {"meta_refresh_count": parser.meta_refresh_count},
+            }
+        )
+
+    if parser.external_script_count >= 4:
+        findings.append(
+            {
+                "signal": "heavy_external_script_surface",
+                "severity": "low",
+                "score": 6,
+                "reason": "Fetched page loads several external scripts, which can hide dynamic phishing behavior.",
+                "details": {"external_script_count": parser.external_script_count},
+            }
+        )
+
+    summary = _content_summary(title, sample["content_type"], sample.get("truncated", False), findings)
+    return {
+        "status": "ok",
+        "url": sample["url"],
+        "content_type": sample["content_type"],
+        "title": title or None,
+        "form_count": parser.form_count,
+        "password_field_count": parser.password_field_count,
+        "external_script_count": parser.external_script_count,
+        "inline_script_count": parser.inline_script_count,
+        "meta_refresh_count": parser.meta_refresh_count,
+        "truncated": sample.get("truncated", False),
+        "findings": findings,
+        "summary": summary,
+    }
 
 
 def evaluate_network_safety(hostname: str) -> dict:
@@ -322,6 +418,102 @@ def _dns_summary(result: dict) -> str:
     if result.get("addresses"):
         return "DNS resolved successfully."
     return "No DNS address records were resolved."
+
+
+def _content_summary(title: str | None, content_type: str | None, truncated: bool, findings: list[dict]) -> str:
+    prefix = f"{content_type or 'Content'} page fetched successfully"
+    if title:
+        prefix = f"{prefix} ({title})"
+    if findings:
+        return f"{prefix}; {len(findings)} suspicious content indicator(s) were found."
+    if truncated:
+        return f"{prefix}; sample truncated after the first 64 KB."
+    return f"{prefix} with no obvious credential or redirect markers."
+
+
+def _fetch_page_sample(url: str) -> dict:
+    request = urllib.request.Request(
+        url,
+        headers={
+            "user-agent": "CipherX-Advanced-Scanner/1.0",
+            "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.5",
+        },
+        method="GET",
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=CONTENT_FETCH_TIMEOUT_SECONDS) as response:
+            content_type = (response.headers.get_content_type() if response.headers else "text/html") or "text/html"
+            if content_type not in {"text/html", "application/xhtml+xml", "text/plain", "application/xml"}:
+                return {
+                    "status": "not_html",
+                    "summary": f"Content type {content_type} not scanned.",
+                    "content_type": content_type,
+                }
+
+            raw = response.read(MAX_CONTENT_BYTES + 1)
+            truncated = len(raw) > MAX_CONTENT_BYTES
+            payload = raw[:MAX_CONTENT_BYTES]
+            charset = response.headers.get_content_charset() if response.headers else None
+            body = payload.decode(charset or "utf-8", errors="replace")
+            return {
+                "status": "ok",
+                "url": response.geturl() or url,
+                "content_type": content_type,
+                "body": body,
+                "truncated": truncated,
+            }
+    except Exception as err:
+        return {"status": "error", "summary": "Content fetch failed.", "error": str(err)}
+
+
+class _ContentIntelParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.title_parts = []
+        self.visible_text = []
+        self.form_actions = []
+        self.form_count = 0
+        self.password_field_count = 0
+        self.external_script_count = 0
+        self.inline_script_count = 0
+        self.meta_refresh_count = 0
+        self._in_title = False
+
+    def handle_starttag(self, tag, attrs):
+        attrs = {key.lower(): (value or "") for key, value in attrs}
+        if tag == "title":
+            self._in_title = True
+            return
+        if tag == "form":
+            self.form_count += 1
+            action = attrs.get("action")
+            if action:
+                self.form_actions.append(action)
+            return
+        if tag == "input" and attrs.get("type", "").lower() == "password":
+            self.password_field_count += 1
+            return
+        if tag == "script":
+            if attrs.get("src"):
+                self.external_script_count += 1
+            else:
+                self.inline_script_count += 1
+            return
+        if tag == "meta" and attrs.get("http-equiv", "").lower() == "refresh":
+            self.meta_refresh_count += 1
+
+    def handle_endtag(self, tag):
+        if tag == "title":
+            self._in_title = False
+
+    def handle_data(self, data):
+        text = data.strip()
+        if not text:
+            return
+        if self._in_title:
+            self.title_parts.append(text)
+        self.visible_text.append(text)
 
 
 def _tls_summary(age_days: int | None, expires_in_days: int | None, issuer: dict) -> str:
