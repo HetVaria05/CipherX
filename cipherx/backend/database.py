@@ -16,18 +16,24 @@ COLLECTION_NAME = "scans"
 _mongo_client = None
 _db = None
 _scans_collection = None
+_db_connection_attempted = False
 _in_memory_scans: List[Dict[str, Any]] = []
 
 
 def get_db():
-    global _mongo_client, _db, _scans_collection
+    global _mongo_client, _db, _scans_collection, _db_connection_attempted
     if _scans_collection is not None:
         return _scans_collection
 
-    if not MONGODB_URI:
-        logger.info("No MONGODB_URI configured. Running with in-memory scan storage.")
+    if _db_connection_attempted:
         return None
 
+    if not MONGODB_URI:
+        logger.info("No MONGODB_URI configured. Running with in-memory scan storage.")
+        _db_connection_attempted = True
+        return None
+
+    _db_connection_attempted = True
     try:
         from pymongo import MongoClient, DESCENDING
         _mongo_client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=2500)
@@ -281,3 +287,308 @@ def consume_user_quota(user_id: str) -> bool:
     current["used"] = new_used
     _in_memory_quotas[user_id] = current
     return True
+
+
+# ==========================================
+# User Authentication & Management
+# ==========================================
+
+USERS_COLLECTION_NAME = "users"
+_in_memory_users: Dict[str, Dict[str, Any]] = {}
+
+
+def _hash_password(password: str, salt: Optional[str] = None) -> tuple[str, str]:
+    import hashlib
+    import secrets
+    if not salt:
+        salt = secrets.token_hex(16)
+    hashed = hashlib.sha256((password + salt).encode("utf-8")).hexdigest()
+    return hashed, salt
+
+
+def create_user(email: str, password: str, full_name: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Registers a new user. Raises ValueError if email already exists.
+    """
+    normalized_email = email.strip().lower()
+    if not normalized_email or "@" not in normalized_email:
+        raise ValueError("Invalid email address provided.")
+    if len(password) < 6:
+        raise ValueError("Password must be at least 6 characters long.")
+
+    hashed_pw, salt = _hash_password(password)
+    now = time.time()
+    user_doc = {
+        "email": normalized_email,
+        "full_name": (full_name or "").strip() or normalized_email.split("@")[0],
+        "password_hash": hashed_pw,
+        "salt": salt,
+        "tier": "free",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_timestamp": now,
+    }
+
+    collection = get_db()
+    if collection is not None and _db is not None:
+        try:
+            users_col = _db[USERS_COLLECTION_NAME]
+            # Ensure unique index on email
+            users_col.create_index("email", unique=True)
+            existing = users_col.find_one({"email": normalized_email})
+            if existing:
+                raise ValueError("An account with this email already exists.")
+            insert_res = users_col.insert_one(user_doc)
+            user_doc["id"] = str(insert_res.inserted_id)
+            del user_doc["password_hash"]
+            del user_doc["salt"]
+            if "_id" in user_doc:
+                del user_doc["_id"]
+            return user_doc
+        except ValueError:
+            raise
+        except Exception as err:
+            logger.error(f"Error inserting user into MongoDB ({err}). Using in-memory.")
+
+    if normalized_email in _in_memory_users:
+        raise ValueError("An account with this email already exists.")
+
+    user_doc["id"] = f"user_{int(now * 1000)}"
+    _in_memory_users[normalized_email] = user_doc
+
+    safe_user = {k: v for k, v in user_doc.items() if k not in ("password_hash", "salt", "_id")}
+    return safe_user
+
+
+def get_or_create_google_user(email: str, full_name: Optional[str] = None, avatar_url: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Finds or provisions an account for a Google-authenticated user in MongoDB.
+    """
+    normalized_email = email.strip().lower()
+    if not normalized_email or "@" not in normalized_email:
+        raise ValueError("Invalid Google account email.")
+
+    now = time.time()
+    name = (full_name or "").strip() or normalized_email.split("@")[0]
+
+    collection = get_db()
+    if collection is not None and _db is not None:
+        try:
+            users_col = _db[USERS_COLLECTION_NAME]
+            existing = users_col.find_one({"email": normalized_email})
+            if existing:
+                return {
+                    "id": str(existing.get("_id", existing.get("id"))),
+                    "email": existing.get("email"),
+                    "full_name": existing.get("full_name"),
+                    "avatar_url": existing.get("avatar_url", avatar_url),
+                    "provider": "google",
+                    "tier": existing.get("tier", "free"),
+                    "created_at": existing.get("created_at"),
+                }
+
+            # New Google User
+            new_doc = {
+                "email": normalized_email,
+                "full_name": name,
+                "avatar_url": avatar_url,
+                "provider": "google",
+                "tier": "free",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "created_timestamp": now,
+            }
+            insert_res = users_col.insert_one(new_doc)
+            new_doc["id"] = str(insert_res.inserted_id)
+            if "_id" in new_doc:
+                del new_doc["_id"]
+            return new_doc
+        except Exception as err:
+            logger.error(f"Error provisioning Google user in MongoDB: {err}")
+
+    # In-memory fallback
+    if normalized_email in _in_memory_users:
+        u = _in_memory_users[normalized_email]
+        return {
+            "id": str(u.get("id")),
+            "email": u.get("email"),
+            "full_name": u.get("full_name"),
+            "avatar_url": u.get("avatar_url", avatar_url),
+            "provider": "google",
+            "tier": u.get("tier", "free"),
+            "created_at": u.get("created_at"),
+        }
+
+    user_doc = {
+        "id": f"guser_{int(now * 1000)}",
+        "email": normalized_email,
+        "full_name": name,
+        "avatar_url": avatar_url,
+        "provider": "google",
+        "tier": "free",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_timestamp": now,
+    }
+    _in_memory_users[normalized_email] = user_doc
+    return user_doc
+
+
+def authenticate_user(email: str, password: str) -> Dict[str, Any]:
+    """
+    Authenticates a user by email and password. Returns safe user dictionary.
+    """
+    normalized_email = email.strip().lower()
+    collection = get_db()
+    if collection is not None and _db is not None:
+        try:
+            users_col = _db[USERS_COLLECTION_NAME]
+            user = users_col.find_one({"email": normalized_email})
+            if user:
+                hashed, _ = _hash_password(password, user.get("salt", ""))
+                if hashed == user.get("password_hash"):
+                    user_info = {
+                        "id": str(user.get("_id", user.get("id"))),
+                        "email": user.get("email"),
+                        "full_name": user.get("full_name"),
+                        "tier": user.get("tier", "free"),
+                        "created_at": user.get("created_at"),
+                    }
+                    return user_info
+        except Exception as err:
+            logger.error(f"MongoDB authentication failed ({err}). Trying memory.")
+
+    user = _in_memory_users.get(normalized_email)
+    if user:
+        hashed, _ = _hash_password(password, user.get("salt", ""))
+        if hashed == user.get("password_hash"):
+            return {
+                "id": str(user.get("id")),
+                "email": user.get("email"),
+                "full_name": user.get("full_name"),
+                "tier": user.get("tier", "free"),
+                "created_at": user.get("created_at"),
+            }
+
+    raise ValueError("Invalid email or password.")
+
+
+def get_user_by_id(user_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Retrieves user profile information by user ID.
+    """
+    collection = get_db()
+    if collection is not None and _db is not None:
+        try:
+            from bson.objectid import ObjectId
+            users_col = _db[USERS_COLLECTION_NAME]
+            query = {}
+            if ObjectId.is_valid(user_id):
+                query = {"_id": ObjectId(user_id)}
+            else:
+                query = {"id": user_id}
+            user = users_col.find_one(query)
+            if user:
+                return {
+                    "id": str(user.get("_id", user.get("id"))),
+                    "email": user.get("email"),
+                    "full_name": user.get("full_name"),
+                    "tier": user.get("tier", "free"),
+                    "created_at": user.get("created_at"),
+                }
+        except Exception as err:
+            logger.error(f"Error fetching user by ID ({err})")
+
+    for u in _in_memory_users.values():
+        if u.get("id") == user_id:
+            return {
+                "id": u.get("id"),
+                "email": u.get("email"),
+                "full_name": u.get("full_name"),
+                "tier": u.get("tier", "free"),
+                "created_at": u.get("created_at"),
+            }
+    return None
+
+
+def get_user_by_email(email: str) -> Optional[Dict[str, Any]]:
+    """
+    Retrieves safe user profile by email address.
+    """
+    normalized_email = email.strip().lower()
+    collection = get_db()
+    if collection is not None and _db is not None:
+        try:
+            users_col = _db[USERS_COLLECTION_NAME]
+            user = users_col.find_one({"email": normalized_email})
+            if user:
+                return {
+                    "id": str(user.get("_id", user.get("id"))),
+                    "email": user.get("email"),
+                    "full_name": user.get("full_name"),
+                    "tier": user.get("tier", "free"),
+                    "created_at": user.get("created_at"),
+                }
+        except Exception as err:
+            logger.error(f"Error fetching user by email ({err})")
+
+    user = _in_memory_users.get(normalized_email)
+    if user:
+        return {
+            "id": user.get("id"),
+            "email": user.get("email"),
+            "full_name": user.get("full_name"),
+            "tier": user.get("tier", "free"),
+            "created_at": user.get("created_at"),
+        }
+    return None
+
+
+def update_user_tier(email: str, new_tier: str) -> bool:
+    """
+    Updates the tier (free, pro, enterprise) of a user in MongoDB.
+    """
+    normalized_email = email.strip().lower()
+    collection = get_db()
+    if collection is not None and _db is not None:
+        try:
+            users_col = _db[USERS_COLLECTION_NAME]
+            res = users_col.update_one(
+                {"email": normalized_email},
+                {"$set": {"tier": new_tier, "tier_updated_at": datetime.now(timezone.utc).isoformat()}}
+            )
+            return res.modified_count > 0 or res.matched_count > 0
+        except Exception as err:
+            logger.error(f"Error updating user tier ({err})")
+
+    if normalized_email in _in_memory_users:
+        _in_memory_users[normalized_email]["tier"] = new_tier
+        return True
+    return False
+
+
+def get_all_users(limit: int = 50) -> List[Dict[str, Any]]:
+    """
+    Retrieves user list for administration.
+    """
+    collection = get_db()
+    if collection is not None and _db is not None:
+        try:
+            users_col = _db[USERS_COLLECTION_NAME]
+            cursor = users_col.find(
+                {},
+                {"password_hash": 0, "salt": 0}
+            ).limit(limit)
+            results = []
+            for doc in cursor:
+                doc["id"] = str(doc.get("_id", doc.get("id")))
+                if "_id" in doc:
+                    del doc["_id"]
+                results.append(doc)
+            return results
+        except Exception as err:
+            logger.error(f"Error listing users from MongoDB ({err})")
+
+    return [
+        {k: v for k, v in u.items() if k not in ("password_hash", "salt", "_id")}
+        for u in list(_in_memory_users.values())[:limit]
+    ]
+
+

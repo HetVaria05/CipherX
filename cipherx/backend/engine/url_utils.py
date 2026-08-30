@@ -3,6 +3,13 @@ import re
 from dataclasses import dataclass
 from urllib.parse import parse_qsl, quote, urlsplit, urlunsplit
 
+try:
+    import tldextract
+    _tld_extractor = tldextract.TLDExtract(cache_dir=None)
+except Exception:
+    _tld_extractor = None
+
+ALLOWED_SCHEMES = {"http", "https"}
 
 MULTI_PART_SUFFIXES = {
     "ac.in",
@@ -43,38 +50,49 @@ def normalize_url(raw_url: str) -> NormalizedURL:
     if not original:
         raise ValueError("URL cannot be empty")
 
-    had_missing_scheme = not re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", original)
-    parse_target = original
-    if had_missing_scheme:
+    initial_parsed = urlsplit(original)
+    if initial_parsed.scheme:
+        if initial_parsed.scheme.lower() not in ALLOWED_SCHEMES:
+            raise ValueError("Only http/https URLs are allowed")
+        parse_target = original
+        had_missing_scheme = False
+    else:
         parse_target = f"https:{original}" if original.startswith("//") else f"https://{original}"
+        had_missing_scheme = True
 
     parsed = urlsplit(parse_target)
+    scheme = (parsed.scheme or "https").lower()
+    if scheme not in ALLOWED_SCHEMES:
+        raise ValueError("Only http/https URLs are allowed")
+
     if not parsed.hostname:
         raise ValueError("URL must include a hostname")
 
-    scheme = (parsed.scheme or "https").lower()
+
     hostname = parsed.hostname.rstrip(".").lower()
     port = _safe_port(parsed)
     username = parsed.username
     password = parsed.password
-    path = _normalize_percent_encoding(parsed.path or "")
+    path = _normalize_percent_encoding(parsed.path or "/")
     query = _normalize_percent_encoding(parsed.query or "")
     fragment = _normalize_percent_encoding(parsed.fragment or "")
-    is_ipv4, ip_address = _ipv4_details(hostname)
+    is_ip, ip_address, is_ipv4 = _ip_details(hostname)
     registrable_domain = get_registrable_domain(hostname)
     subdomain = get_subdomain(hostname, registrable_domain)
     tld = get_tld(hostname)
 
-    netloc = hostname
-    if username is not None:
-        userinfo = quote(username, safe="")
-        if password is not None:
-            userinfo = f"{userinfo}:{quote(password, safe='')}"
-        netloc = f"{userinfo}@{netloc}"
+    # Format netloc properly for IPv6 literals vs standard hostnames
+    if is_ip and not is_ipv4 and not hostname.startswith("["):
+        netloc = f"[{hostname}]"
+    else:
+        netloc = hostname
+
     if port is not None:
         netloc = f"{netloc}:{port}"
 
-    normalized = urlunsplit((scheme, netloc, path or "/", query, fragment))
+    # Drop fragment from normalized_url for consistent server-side caching & scanning
+    normalized = urlunsplit((scheme, netloc, path or "/", query, ""))
+
 
     return NormalizedURL(
         original_url=original,
@@ -98,8 +116,19 @@ def normalize_url(raw_url: str) -> NormalizedURL:
 
 
 def get_registrable_domain(hostname: str) -> str:
-    if _ipv4_details(hostname)[0]:
+    is_ip, _, _ = _ip_details(hostname)
+    if is_ip:
         return hostname
+
+    if _tld_extractor:
+        try:
+            extracted = _tld_extractor(hostname)
+            if extracted.domain and extracted.suffix:
+                return f"{extracted.domain}.{extracted.suffix}"
+            if extracted.domain:
+                return extracted.domain
+        except Exception:
+            pass
 
     labels = [label for label in hostname.rstrip(".").lower().split(".") if label]
     if len(labels) <= 2:
@@ -113,15 +142,33 @@ def get_registrable_domain(hostname: str) -> str:
 
 
 def get_subdomain(hostname: str, registrable_domain: str) -> str:
-    if not registrable_domain or hostname == registrable_domain:
+    is_ip, _, _ = _ip_details(hostname)
+    if is_ip or not registrable_domain:
         return ""
+
+    if _tld_extractor:
+        try:
+            extracted = _tld_extractor(hostname)
+            return extracted.subdomain
+        except Exception:
+            pass
+
     suffix = f".{registrable_domain}"
     return hostname[: -len(suffix)] if hostname.endswith(suffix) else ""
 
 
 def get_tld(hostname: str) -> str:
-    if _ipv4_details(hostname)[0]:
+    is_ip, _, _ = _ip_details(hostname)
+    if is_ip:
         return ""
+
+    if _tld_extractor:
+        try:
+            extracted = _tld_extractor(hostname)
+            return extracted.suffix
+        except Exception:
+            pass
+
     labels = [label for label in hostname.lower().split(".") if label]
     if len(labels) >= 2 and ".".join(labels[-2:]) in MULTI_PART_SUFFIXES:
         return ".".join(labels[-2:])
@@ -135,12 +182,17 @@ def _safe_port(parsed) -> int | None:
         return None
 
 
-def _ipv4_details(hostname: str) -> tuple[bool, str | None]:
+def _ip_details(hostname: str) -> tuple[bool, str | None, bool]:
+    """
+    Checks if hostname is an IPv4 or IPv6 address.
+    Returns: (is_ip, ip_str, is_ipv4)
+    """
+    cleaned_hostname = hostname.strip("[]")
     try:
-        ip = ipaddress.IPv4Address(hostname)
+        ip = ipaddress.ip_address(cleaned_hostname)
+        return True, str(ip), isinstance(ip, ipaddress.IPv4Address)
     except ValueError:
-        return False, None
-    return True, str(ip)
+        return False, None, False
 
 
 def _normalize_percent_encoding(value: str) -> str:
@@ -149,3 +201,4 @@ def _normalize_percent_encoding(value: str) -> str:
         lambda match: match.group(0).upper(),
         value,
     )
+

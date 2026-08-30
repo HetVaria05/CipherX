@@ -1,11 +1,26 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from contextlib import asynccontextmanager
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from api.routes import router as api_router
+from engine.virustotal import get_default_vt_client
 
-app = FastAPI(title="CipherX API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: ensure client is initialized
+    vt_client = get_default_vt_client()
+    yield
+    # Shutdown: cleanly close HTTP clients
+    await vt_client.close()
+
+
+app = FastAPI(title="CipherX API", lifespan=lifespan)
 
 # Setup CORS
 allowed_origins_env = os.getenv("CORS_ORIGINS", "")
@@ -37,7 +52,8 @@ async def root():
             "advanced_analyze": "/api/advanced-analyze (POST)",
             "documentation": "/docs"
         }
-      }
+    }
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+

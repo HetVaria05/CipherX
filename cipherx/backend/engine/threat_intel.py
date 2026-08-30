@@ -161,14 +161,20 @@ def _local_ioc_candidates(normalized_url: str, hostname: str, domain: str):
         lowered_url.rstrip("/"),
         decoded_url,
         decoded_url.rstrip("/"),
-        hostname.lower(),
-        domain.lower(),
     ]
-    if hostname.lower().startswith("www."):
-        candidates.append(hostname.lower()[4:])
+
+    # Only include naked host/domain candidates if they are NOT in the verified global trusted domains
+    if not is_globally_trusted(hostname):
+        candidates.append(hostname.lower())
+        if hostname.lower().startswith("www."):
+            candidates.append(hostname.lower()[4:])
+
+    if not is_globally_trusted(domain):
+        candidates.append(domain.lower())
 
     deduped = []
     for candidate in candidates:
         if candidate and candidate not in deduped:
             deduped.append(candidate)
     return deduped
+

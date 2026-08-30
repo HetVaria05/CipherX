@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MessageSquare, RefreshCcw, ArrowDownRight, CloudUpload, Headphones, BookOpen, Star, Mail, Send } from 'lucide-react';
+import { MessageSquare, RefreshCcw, ArrowDownRight, Newspaper, ShieldCheck, BookOpen, Star, Mail, Send } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 
 const ChatbotWidget = () => {
@@ -42,11 +42,11 @@ const ChatbotWidget = () => {
           {/* Options Card */}
           <div className="bg-vt-800 rounded-xl border border-vt-700 overflow-hidden divide-y divide-vt-700 shadow-sm">
             <button className="w-full flex items-center gap-4 p-4 hover:bg-vt-900/60 transition-colors text-left group">
-              <CloudUpload className="w-5 h-5 text-vt-text group-hover:text-vt-accent transition-colors" />
+              <Newspaper className="w-5 h-5 text-vt-text group-hover:text-vt-accent transition-colors" />
               <span className="text-sm text-vt-heading font-medium group-hover:text-vt-accent transition-colors">{t('chat_opt_1')}</span>
             </button>
             <button className="w-full flex items-center gap-4 p-4 hover:bg-vt-900/60 transition-colors text-left group">
-              <Headphones className="w-5 h-5 text-vt-text group-hover:text-vt-accent transition-colors" />
+              <ShieldCheck className="w-5 h-5 text-vt-text group-hover:text-vt-accent transition-colors" />
               <span className="text-sm text-vt-heading font-medium group-hover:text-vt-accent transition-colors">{t('chat_opt_2')}</span>
             </button>
             <button className="w-full flex items-center gap-4 p-4 hover:bg-vt-900/60 transition-colors text-left group">

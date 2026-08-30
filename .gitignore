@@ -4,15 +4,15 @@
 !.env.example
 
 # Python
-.venv/
+**/.venv/
 venv/
-__pycache__/
+**/__pycache__/
 *.pyc
 *.pyo
 *.pyd
 
 # Node
-node_modules/
+**/node_modules/
 dist/
 build/
 
@@ -28,12 +28,16 @@ Thumbs.db
 *.log
 
 # Python test/cache
-.pytest_cache/
+**/.pytest_cache/
 .mypy_cache/
+
+# Large ML models & Datasets (>50MB)
+*.joblib
+cipherx/backend/data/*.csv
 
 # Archives
 *.zip
 
 # Agent Handover Workspace (Local Context Only)
 AGENTS_WORKSPACE.md/
-AGENTS_WORKSPACE.md
+AGENTS_WORKSPACE.md

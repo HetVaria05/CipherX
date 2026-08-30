@@ -267,3 +267,70 @@ def test_content_scan_detects_login_form():
         assert result["status"] == "ok"
         assert result["password_field_count"] == 1
         assert any(finding["signal"] == "credential_form_detected" for finding in result["findings"])
+
+
+def test_normalize_url_scheme_restrictions():
+    from engine.url_utils import normalize_url
+
+    with pytest.raises(ValueError, match="Only http/https URLs are allowed"):
+        normalize_url("file:///etc/passwd")
+
+    with pytest.raises(ValueError, match="Only http/https URLs are allowed"):
+        normalize_url("ftp://ftp.example.com/files")
+
+    with pytest.raises(ValueError, match="Only http/https URLs are allowed"):
+        normalize_url("javascript:alert(1)")
+
+
+def test_normalize_url_strips_fragments_and_userinfo():
+    from engine.url_utils import normalize_url
+
+    norm = normalize_url("https://user:password@example.com:8080/path?query=1#frag")
+    assert norm.scheme == "https"
+    assert norm.hostname == "example.com"
+    assert norm.port == 8080
+    assert norm.username == "user"
+    assert norm.password == "password"
+    assert norm.fragment == "frag"
+    # Netloc and normalized_url must NOT include userinfo or fragments
+    assert norm.normalized_url == "https://example.com:8080/path?query=1"
+
+
+def test_normalize_url_ipv6_literal():
+    from engine.url_utils import normalize_url
+
+    norm = normalize_url("http://[2001:db8::1]:8080/api")
+    assert norm.hostname == "2001:db8::1"
+    assert norm.port == 8080
+    assert norm.registrable_domain == "2001:db8::1"
+    assert norm.normalized_url == "http://[2001:db8::1]:8080/api"
+
+
+
+def test_network_safety_ssrf_and_dns_fail():
+    from engine.network_intel import evaluate_network_safety
+
+    # Localhost check
+    safety_local = evaluate_network_safety("localhost")
+    assert safety_local["safe_for_network_probe"] is False
+    assert "localhost_hostname" in safety_local["blocked_reasons"]
+
+    # Private IP literal check
+    safety_private = evaluate_network_safety("127.0.0.1")
+    assert safety_private["safe_for_network_probe"] is False
+    assert "private_or_reserved_address" in safety_private["blocked_reasons"]
+
+    # Unresolvable hostname check (DNS fail = block)
+    safety_unresolvable = evaluate_network_safety("this-is-a-completely-nonexistent-domain-123456789.xyz")
+    assert safety_unresolvable["safe_for_network_probe"] is False
+    assert "dns_resolution_failed" in safety_unresolvable["blocked_reasons"]
+
+
+def test_scan_timing_metric_present():
+    response = client.post("/api/analyze", json={"url": "https://example.com"})
+    assert response.status_code == 200
+    data = response.json()
+    assert "scan_duration_ms" in data
+    assert isinstance(data["scan_duration_ms"], (int, float))
+    assert data["scan_duration_ms"] >= 0
+

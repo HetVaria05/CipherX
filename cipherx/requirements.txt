@@ -1,0 +1,14 @@
+fastapi>=0.100.0
+uvicorn>=0.23.0
+pydantic
+python-dotenv
+pymongo
+dnspython
+scikit-learn
+joblib
+pandas
+httpx>=0.24.0
+aiodns>=3.0.0
+tldextract>=3.4.0
+cachetools>=5.0.0
+pytest

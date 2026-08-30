@@ -1,15 +1,19 @@
 import React, { useState } from 'react';
-import { Search, Loader2, Zap, FileText, QrCode, MessageSquareText, ShieldAlert, Fingerprint } from 'lucide-react';
+import { Search, Loader2, Zap, FileText, QrCode, MessageSquareText, ShieldAlert, Fingerprint, Crown, Sparkles } from 'lucide-react';
 import ResultDashboard from './components/ResultDashboard';
 import RecentScans from './components/RecentScans';
 import Navbar from './components/Navbar';
 import FeaturesSection from './components/FeaturesSection';
 import ChatbotWidget from './components/ChatbotWidget';
+import AuthModal from './components/AuthModal';
+import PricingModal from './components/PricingModal';
 import { analyzeUrl, advancedAnalyzeUrl } from './services/api';
 import { useLanguage } from './context/LanguageContext';
+import { useAuth } from './context/AuthContext';
 
 function App() {
   const { t } = useLanguage();
+  const { user, quota, setQuota, refreshQuota, setPricingModalOpen } = useAuth();
   const [activeTab, setActiveTab] = useState('URL');
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
@@ -47,15 +51,21 @@ function App() {
     setError('');
     setAdvancedLoading(true);
     try {
-      // Backend will use its configured free tier VT API key
+      const userIdentifier = user?.email || 'guest_user';
       const data = await advancedAnalyzeUrl({
         url: targetUrl,
         virustotal_api_key: null,
         use_virustotal: true,
         submit_to_virustotal: false,
         include_network: true,
+        user_id: userIdentifier,
       });
       setResult(data);
+      if (data.quota) {
+        setQuota(data.quota);
+      } else {
+        await refreshQuota();
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -173,16 +183,21 @@ function App() {
               </div>
 
               {/* Performance & Signatures Grid */}
-              <div className="grid grid-cols-2 gap-3 text-center">
-                <div className="bg-vt-900 p-3.5 rounded-xl border border-vt-700/50">
-                  <span className="text-xs text-vt-text/60 uppercase tracking-wider block mb-1">{t('monitor_sigs_title')}</span>
-                  <span className="text-2xl font-mono font-bold text-white">15,000+</span>
-                  <span className="text-[10px] text-vt-text/50 block mt-0.5">{t('monitor_sigs_desc')}</span>
+              <div className="grid grid-cols-3 gap-2.5 text-center">
+                <div className="bg-vt-900 p-3 rounded-xl border border-vt-700/50">
+                  <span className="text-[11px] text-vt-text/60 uppercase tracking-wider block mb-1">Dataset Pool</span>
+                  <span className="text-xl sm:text-2xl font-mono font-bold text-white">~987,000+</span>
+                  <span className="text-[9px] text-vt-text/50 block mt-0.5">Benchmark Repository</span>
                 </div>
-                <div className="bg-vt-900 p-3.5 rounded-xl border border-vt-700/50">
-                  <span className="text-xs text-vt-text/60 uppercase tracking-wider block mb-1">{t('monitor_latency_title')}</span>
-                  <span className="text-2xl font-mono font-bold text-green-400">&lt; 15ms</span>
-                  <span className="text-[10px] text-vt-text/50 block mt-0.5">{t('monitor_latency_desc')}</span>
+                <div className="bg-vt-900 p-3 rounded-xl border border-vt-700/50">
+                  <span className="text-[11px] text-vt-text/60 uppercase tracking-wider block mb-1">{t('monitor_sigs_title')}</span>
+                  <span className="text-xl sm:text-2xl font-mono font-bold text-vt-accent">15,000+</span>
+                  <span className="text-[9px] text-vt-text/50 block mt-0.5">{t('monitor_sigs_desc')}</span>
+                </div>
+                <div className="bg-vt-900 p-3 rounded-xl border border-vt-700/50">
+                  <span className="text-[11px] text-vt-text/60 uppercase tracking-wider block mb-1">{t('monitor_latency_title')}</span>
+                  <span className="text-xl sm:text-2xl font-mono font-bold text-green-400">&lt; 15ms</span>
+                  <span className="text-[9px] text-vt-text/50 block mt-0.5">{t('monitor_latency_desc')}</span>
                 </div>
               </div>
 
@@ -326,19 +341,48 @@ function App() {
                   {/* Option for Advanced Scan after initial scan */}
                   {!result.advanced && (
                     <div className="bg-vt-800 p-6 rounded-2xl border border-vt-700 shadow-lg text-center mt-6 animate-in fade-in duration-500">
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-vt-900 border border-vt-700 text-xs font-mono mb-3">
+                        <span className={`w-2 h-2 rounded-full ${quota.remaining > 0 ? 'bg-green-400' : 'bg-red-400'}`}></span>
+                        <span>Daily Free Tier Quota:</span>
+                        <strong className={quota.remaining > 0 ? 'text-green-400' : 'text-red-400'}>
+                          {quota.remaining} of {quota.total} scans left
+                        </strong>
+                      </div>
                       <Zap className="w-10 h-10 text-vt-accent mx-auto mb-3" />
                       <h3 className="text-lg font-bold text-vt-heading mb-2">{t('res_adv_title')}</h3>
                       <p className="text-sm text-vt-text/80 mb-6 max-w-md mx-auto">
-                        {t('res_adv_desc')}
+                        {quota.remaining > 0
+                          ? t('res_adv_desc')
+                          : 'You have reached your 3 free daily advanced scans. Upgrade to CipherX Pro for unlimited VirusTotal v3 and live sandbox intelligence.'}
                       </p>
-                      <button
-                        onClick={() => handleAdvancedAnalyze(result.url)}
-                        disabled={advancedLoading}
-                        className="inline-flex items-center justify-center gap-2 bg-vt-accent text-white hover:bg-vt-accent/90 py-2.5 px-8 rounded-full font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {advancedLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-                        {advancedLoading ? t('res_adv_btn_running') : t('res_adv_btn_run')}
-                      </button>
+                      
+                      <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                        {quota.remaining > 0 ? (
+                          <button
+                            onClick={() => handleAdvancedAnalyze(result.url)}
+                            disabled={advancedLoading}
+                            className="inline-flex items-center justify-center gap-2 bg-vt-accent text-white hover:bg-vt-accent/90 py-2.5 px-8 rounded-full font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-600/20"
+                          >
+                            {advancedLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                            {advancedLoading ? t('res_adv_btn_running') : t('res_adv_btn_run')}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => setPricingModalOpen(true)}
+                            className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-bold py-2.5 px-8 rounded-full transition-colors shadow-lg shadow-amber-500/20"
+                          >
+                            <Crown className="w-4 h-4" />
+                            Get Unlimited Scans
+                          </button>
+                        )}
+                        
+                        <button
+                          onClick={() => setPricingModalOpen(true)}
+                          className="text-xs text-vt-text hover:text-vt-heading underline py-2 px-3"
+                        >
+                          View Pricing & Tiers
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -404,9 +448,29 @@ function App() {
         {/* Bottom Features Section */}
         <FeaturesSection />
 
+        {/* Global Security Advisory & Safety Disclaimer at Bottom */}
+        <div className="w-full bg-vt-950/80 border-t border-vt-700/60 py-8 px-4 sm:px-6 lg:px-8">
+          <div className="max-w-5xl mx-auto p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center gap-3.5 text-xs text-amber-300/90 leading-relaxed">
+            <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 flex-shrink-0">
+              <ShieldAlert className="w-5 h-5" />
+            </div>
+            <div className="space-y-0.5">
+              <p className="font-bold text-amber-200 uppercase tracking-wider text-[11px]">
+                Cybersecurity & Threat Detection Notice
+              </p>
+              <p className="text-vt-text/90 text-xs">
+                CipherX scans analyze structural heuristics, heuristic patterns, and multi-vendor threat intelligence feeds at the time of query.
+                <strong className="text-white"> We do not guarantee 100% safety or complete immunity from novel zero-day attacks, cloaked exploits, or newly registered malicious infrastructure.</strong> Always verify sensitive domains before submitting credentials.
+              </p>
+            </div>
+          </div>
+        </div>
+
       </main>
 
       <ChatbotWidget />
+      <AuthModal />
+      <PricingModal />
     </div>
   );
 }

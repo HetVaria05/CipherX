@@ -44,8 +44,14 @@ def predict_ml_risk(features: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if model is None or meta is None:
         return None
 
+    try:
+        import pandas as pd
+    except ImportError:
+        return None
+
     feature_cols = meta.get("feature_columns", [])
     try:
+
         row = {
             "url_length": features.get("url_length", 0),
             "hostname_length": features.get("hostname_length", 0),

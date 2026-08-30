@@ -15,7 +15,7 @@ export const translations = {
 
     // Tabs
     tab_url: "URL",
-    tab_qr: "QR SCAN",
+    tab_qr: "QR SCAN (Soon)",
     tab_sms: "SMS / MAIL (Soon)",
     tab_file: "FILE (Soon)",
 
@@ -32,7 +32,7 @@ export const translations = {
     feat_game_title: "Gamified Experience",
     feat_game_desc: "Earn XP, unlock badges, and level up as you complete interactive cybersecurity training and threat hunts.",
     feat_analytics_title: "Real-time Analytics",
-    feat_analytics_desc: "Monitor threat intelligence progress, identify critical bottlenecks, and see live results on our dashboard.",
+    feat_analytics_desc: "Monitor threat intelligence progress, identify critical bottlenecks, and see live results on our dashboard. Trained on a 987,000+ URL dataset pool.",
 
     // Monitor Modal
     monitor_title: "Live Threat Monitor & Web Shield",
@@ -59,11 +59,11 @@ export const translations = {
     block_desc_3: "High-Risk Phishing & Adversarial Deception",
     block_desc_4: "page.",
     block_reason_threat: "Threat: Brand Impersonation",
-    block_reason_heur: "Heuristics: Typosquatting / High Entropy",
-    block_reason_lat: "Latency: Intercepted in",
+    block_reason_heur: "Analysis: TypoSquatting Domain",
+    block_reason_lat: "Interception Latency:",
     block_reason_stat: "Status: Navigation Blocked",
     block_btn_back: "Back to Safety (Recommended)",
-    block_btn_proceed: "Dismiss Simulation / Proceed Anyway (Unsafe)",
+    block_btn_proceed: "Dismiss Demo / Proceed (Unsafe)",
 
     // Result Dashboard
     res_title: "Detection Summary",
@@ -72,10 +72,10 @@ export const translations = {
     res_confidence: "Confidence Level",
     res_verdict: "Verdict",
     res_explanation: "Detailed Explanation",
-    res_adv_btn_run: "Run Advanced Scan",
-    res_adv_btn_running: "Running Advanced Scan...",
+    res_adv_btn_run: "Run Deep Intelligence Scan",
+    res_adv_btn_running: "Running Deep Intelligence Scan...",
     res_adv_title: "Deep Intelligence Scan",
-    res_adv_desc: "Cross-reference this URL with VirusTotal v3 for deeper threat intelligence and vendor breakdown.",
+    res_adv_desc: "Cross-reference this URL with VirusTotal v3 and run automated DNS/TLS network intelligence checks for advanced threat correlation.",
     res_vt_title: "VirusTotal v3 Intelligence",
     res_vt_status: "Status",
     res_vt_malicious: "Malicious",
@@ -141,8 +141,8 @@ export const translations = {
     chat_greet_4: "using public",
     chat_greet_5: "documentation",
     chat_greet_6: ". Feel free to ask questions, or explore the shortcuts below.",
-    chat_opt_1: "I have some new files to upload and want a free API quota",
-    chat_opt_2: "Contact technical support",
+    chat_opt_1: "Latest Technical News",
+    chat_opt_2: "Tips to stay safe",
     chat_opt_3: "Technical documentation",
     chat_opt_4: "Learn about premium services",
     chat_opt_5: "Contact sales",
@@ -162,7 +162,7 @@ export const translations = {
     hero_subtitle: "માલવેર અને અન્ય ઉલ્લંઘનો શોધવા માટે શંકાસ્પદ ફાઇલો, ડોમેન્સ, આઇપી અને યુઆરએલનું વિશ્લેષણ કરો અને તેમને આપમેળે સુરક્ષા સમુદાય સાથે શેર કરો.",
 
     tab_url: "યુઆરએલ (URL)",
-    tab_qr: "ક્યૂઆર સ્કેન (QR)",
+    tab_qr: "ક્યૂઆર સ્કેન (ટૂંક સમયમાં)",
     tab_sms: "એસએમએસ/ઇમેઇલ (ટૂંક સમયમાં)",
     tab_file: "ફાઇલ (ટૂંક સમયમાં)",
 
@@ -177,7 +177,7 @@ export const translations = {
     feat_game_title: "ગેમિફાઇડ અનુભવ",
     feat_game_desc: "ઇન્ટરેક્ટિવ સાયબર સિક્યોરિટી તાલીમ પૂર્ણ કરો, XP કમાઓ અને બેજ અનલૉક કરો.",
     feat_analytics_title: "રીઅલ-ટાઇમ એનાલિટિક્સ",
-    feat_analytics_desc: "થ્રેટ ઇન્ટેલિજન્સ પ્રગતિનું નિરીક્ષણ કરો અને અમારા ડેશબોર્ડ પર લાઇવ પરિણામો જુઓ.",
+    feat_analytics_desc: "થ્રેટ ઇન્ટેલિજન્સ પ્રગતિનું નિરીક્ષણ કરો અને અમારા ડેશબોર્ડ પર લાઇવ પરિણામો જુઓ. ૯,૮૭,૦૦૦+ (987,000+) URL ડેટાસેટ પૂલ પર પ્રશિક્ષિત.",
 
     monitor_title: "લાઇવ થ્રેટ મોનિટર અને વેબ શિલ્ડ",
     monitor_subtitle: "રીઅલ-ટાઇમ યુઆરએલ ઇન્ટરસેપ્શન અને બ્રાઉઝર સુરક્ષા",
@@ -280,8 +280,8 @@ export const translations = {
     chat_greet_4: "જાહેર",
     chat_greet_5: "દસ્તાવેજીકરણનો",
     chat_greet_6: " ઉપયોગ કરીને પ્રશ્નોના જવાબો આપવામાં નિષ્ણાત છું. મને કંઈપણ પૂછો.",
-    chat_opt_1: "મારે ફાઇલો અપલોડ કરવી છે અને મફત API ક્વોટા જોઈએ છે",
-    chat_opt_2: "ટેક્નિકલ સપોર્ટનો સંપર્ક કરો",
+    chat_opt_1: "તાજા ટેકનિકલ સમાચાર",
+    chat_opt_2: "સુરક્ષિત રહેવાની ટિપ્સ",
     chat_opt_3: "ટેક્નિકલ દસ્તાવેજીકરણ",
     chat_opt_4: "પ્રીમિયમ સેવાઓ વિશે જાણો",
     chat_opt_5: "વેચાણ (Sales) સંપર્ક",
@@ -301,7 +301,7 @@ export const translations = {
     hero_subtitle: "मैलवेयर और अन्य उल्लंघनों का पता लगाने के लिए संदिग्ध फ़ाइलों, डोमेन, आईपी और यूआरएल का विश्लेषण करें और उन्हें स्वचालित रूप से सुरक्षा समुदाय के साथ साझा करें।",
 
     tab_url: "यूआरएल (URL)",
-    tab_qr: "क्यूआर स्कैन (QR)",
+    tab_qr: "क्यूआर स्कैन (जल्द ही)",
     tab_sms: "एसएमएस/ईमेल (जल्द ही)",
     tab_file: "फ़ाइल (जल्द ही)",
 
@@ -316,7 +316,7 @@ export const translations = {
     feat_game_title: "गैमिफाइड अनुभव",
     feat_game_desc: "इंटरैक्टिव साइबर सुरक्षा प्रशिक्षण पूरा करें, XP कमाएं और बैज अनलॉक करें।",
     feat_analytics_title: "रीयल-टाइम एनालिटिक्स",
-    feat_analytics_desc: "थ्रेट इंटेलिजेंस प्रगति की निगरानी करें और हमारे डैशबोर्ड पर लाइव परिणाम देखें।",
+    feat_analytics_desc: "थ्रेट इंटेलिजेंस प्रगति की निगरानी करें और हमारे डैशबोर्ड पर लाइव परिणाम देखें। 987,000+ URL डेटासेट पूल पर प्रशिक्षित।",
 
     monitor_title: "लाइव थ्रेट मॉनिटर और वेब शील्ड",
     monitor_subtitle: "रीयल-टाइम यूआरएल इंटरसेप्शन और ब्राउज़र सुरक्षा",
@@ -419,8 +419,8 @@ export const translations = {
     chat_greet_4: "सार्वजनिक",
     chat_greet_5: "दस्तावेज़ीकरण",
     chat_greet_6: " का उपयोग करके सवालों के जवाब देने में माहिर हूँ। मुझसे कुछ भी पूछें।",
-    chat_opt_1: "मुझे फ़ाइलें अपलोड करनी हैं और मुफ़्त API कोटा चाहिए",
-    chat_opt_2: "तकनीकी सहायता से संपर्क करें",
+    chat_opt_1: "नवीनतम तकनीकी समाचार",
+    chat_opt_2: "सुरक्षित रहने के उपाय",
     chat_opt_3: "तकनीकी दस्तावेज़ीकरण",
     chat_opt_4: "प्रीमियम सेवाओं के बारे में जानें",
     chat_opt_5: "बिक्री (Sales) संपर्क",

@@ -43,14 +43,16 @@ export default function ResultDashboard({ result }) {
     classification,
     confidence,
     signals,
-    features,
-    adversarial_findings,
-    brand_analysis,
     explanation
   } = result;
 
+  const baseAnalysis = result.base_analysis || {};
+  const features = result.features || baseAnalysis.features;
+  const adversarial_findings = result.adversarial_findings || baseAnalysis.adversarial_findings;
+  const brand_analysis = result.brand_analysis || baseAnalysis.brand_analysis;
+
   const threatIntelMatch = features?.threat_intel_match;
-  const networkData = result.network || (result.advanced && result.advanced.network);
+  const networkData = result.network || (result.advanced && result.advanced.network) || baseAnalysis.network;
 
   return (
     <div className="w-full max-w-4xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 text-vt-text">
@@ -200,7 +202,9 @@ export default function ResultDashboard({ result }) {
               </div>
               <div className="bg-vt-900/80 p-3.5 rounded-xl border border-vt-700/60">
                 <span className="text-vt-text text-xs block mb-1">{t('res_brand_match')}</span>
-                <span className="font-mono font-bold text-vt-heading text-sm">{(brand_analysis.similarity_score * 100).toFixed(0)}%</span>
+                <span className="font-mono font-bold text-vt-heading text-sm">
+                  {((brand_analysis.similarity_score ?? 0) * 100).toFixed(0)}%
+                </span>
               </div>
               {brand_analysis.best_match && (
                 <div className="bg-vt-900/80 p-3.5 rounded-xl border border-vt-700/60">
@@ -216,59 +220,145 @@ export default function ResultDashboard({ result }) {
         {result.advanced && result.advanced.virustotal && (
           <div className="space-y-6">
             <div className="bg-vt-800 p-6 rounded-2xl border border-vt-700 shadow-lg">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-md font-bold text-vt-heading flex items-center gap-2">
-                  <Radio className="w-5 h-5 text-vt-accent" />
-                  {t('res_vt_title')}
-                </h3>
-                <span className="text-xs font-mono uppercase px-2.5 py-1 rounded bg-vt-900 border border-vt-700 text-vt-text">
-                  {t('res_vt_status')}: {result.advanced.virustotal.status || 'unknown'}
-                </span>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+                <div>
+                  <h3 className="text-md font-bold text-vt-heading flex items-center gap-2">
+                    <Radio className="w-5 h-5 text-vt-accent" />
+                    {t('res_vt_title')}
+                  </h3>
+                  <p className="text-xs text-vt-text/70 mt-0.5">
+                    Multi-engine antivirus & blacklisting vendor consensus
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono uppercase px-2.5 py-1 rounded bg-vt-900 border border-vt-700 text-vt-text">
+                    {t('res_vt_status')}: {result.advanced.virustotal.status || 'unknown'}
+                  </span>
+                </div>
               </div>
 
               {result.advanced.virustotal.stats ? (
-                <div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center mb-4">
-                    <div className="bg-vt-900/80 p-3 rounded-xl border border-red-500/30">
+                <div className="space-y-6">
+                  {/* VirusTotal Specific Risk Score Banner */}
+                  <div className="p-4 rounded-xl bg-vt-900/90 border border-vt-700/80 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="flex items-center gap-3.5">
+                      <div className={clsx(
+                        "w-12 h-12 rounded-xl flex items-center justify-center font-mono font-bold text-lg border",
+                        (result.advanced.virustotal.vt_risk_score ?? 0) >= 40
+                          ? "bg-red-500/10 text-red-400 border-red-500/30"
+                          : (result.advanced.virustotal.vt_risk_score ?? 0) > 0
+                          ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                          : "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                      )}>
+                        {result.advanced.virustotal.vt_risk_score ?? 0}
+                      </div>
+                      <div>
+                        <span className="text-xs text-vt-text uppercase font-bold tracking-wider block">VirusTotal Threat Score</span>
+                        <span className="text-sm font-semibold text-vt-heading">
+                          {(result.advanced.virustotal.vt_risk_score ?? 0) >= 40
+                            ? 'High Vendor Consensus Threat'
+                            : (result.advanced.virustotal.vt_risk_score ?? 0) > 0
+                            ? 'Suspicious Vendor Flagging'
+                            : 'Clean Consensus'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="text-right sm:border-l sm:border-vt-700/60 sm:pl-4 text-xs text-vt-text font-mono">
+                      <div>Reputation: <strong className="text-vt-heading">{result.advanced.virustotal.reputation ?? 0}</strong></div>
+                      <div>Engines Queried: <strong className="text-vt-heading">{result.advanced.virustotal.stats.total || 0}</strong></div>
+                    </div>
+                  </div>
+
+                  {/* 4 Core Detection Stat Boxes */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                    <div className="bg-vt-900/80 p-3.5 rounded-xl border border-red-500/30">
                       <span className="text-xs text-red-500 dark:text-red-400 block font-semibold mb-1">{t('res_vt_malicious')}</span>
-                      <span className="text-xl font-bold text-red-500 dark:text-red-400 font-mono">
+                      <span className="text-2xl font-bold text-red-500 dark:text-red-400 font-mono">
                         {result.advanced.virustotal.stats.malicious || 0}
                       </span>
                     </div>
-                    <div className="bg-vt-900/80 p-3 rounded-xl border border-amber-500/30">
+                    <div className="bg-vt-900/80 p-3.5 rounded-xl border border-amber-500/30">
                       <span className="text-xs text-amber-500 dark:text-amber-400 block font-semibold mb-1">{t('res_vt_suspicious')}</span>
-                      <span className="text-xl font-bold text-amber-500 dark:text-amber-400 font-mono">
+                      <span className="text-2xl font-bold text-amber-500 dark:text-amber-400 font-mono">
                         {result.advanced.virustotal.stats.suspicious || 0}
                       </span>
                     </div>
-                    <div className="bg-vt-900/80 p-3 rounded-xl border border-emerald-500/30">
+                    <div className="bg-vt-900/80 p-3.5 rounded-xl border border-emerald-500/30">
                       <span className="text-xs text-emerald-500 dark:text-emerald-400 block font-semibold mb-1">{t('res_vt_harmless')}</span>
-                      <span className="text-xl font-bold text-emerald-500 dark:text-emerald-400 font-mono">
+                      <span className="text-2xl font-bold text-emerald-500 dark:text-emerald-400 font-mono">
                         {result.advanced.virustotal.stats.harmless || 0}
                       </span>
                     </div>
-                    <div className="bg-vt-900/80 p-3 rounded-xl border border-vt-700/50">
+                    <div className="bg-vt-900/80 p-3.5 rounded-xl border border-vt-700/50">
                       <span className="text-xs text-vt-text block font-semibold mb-1">{t('res_vt_undetected')}</span>
-                      <span className="text-xl font-bold text-vt-heading font-mono">
+                      <span className="text-2xl font-bold text-vt-heading font-mono">
                         {result.advanced.virustotal.stats.undetected || 0}
                       </span>
                     </div>
                   </div>
+
+                  {/* Flagged Security Engines List if any */}
+                  {result.advanced.virustotal.flagged_engines && result.advanced.virustotal.flagged_engines.length > 0 && (
+                    <div className="p-4 rounded-xl bg-vt-900/90 border border-red-500/30 space-y-3">
+                      <span className="text-xs font-bold uppercase tracking-wider text-red-400 flex items-center gap-1.5">
+                        <AlertOctagon className="w-4 h-4 text-red-500" />
+                        Flagged Security Vendors ({result.advanced.virustotal.flagged_engines.length})
+                      </span>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                        {result.advanced.virustotal.flagged_engines.map((eng, idx) => (
+                          <div key={idx} className="p-2.5 rounded-lg bg-vt-800 border border-red-500/20 flex flex-col justify-between">
+                            <span className="text-xs font-bold text-white font-mono">{eng.engine}</span>
+                            <span className="text-[11px] text-red-300 capitalize mt-1 font-mono">
+                              {eng.result || eng.category}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Categories & Tags */}
+                  {((result.advanced.virustotal.tags && result.advanced.virustotal.tags.length > 0) || (result.advanced.virustotal.categories && Object.keys(result.advanced.virustotal.categories).length > 0)) && (
+                    <div className="p-4 rounded-xl bg-vt-900/60 border border-vt-700/60 flex flex-wrap gap-2 items-center">
+                      <span className="text-xs font-semibold text-vt-text uppercase tracking-wider mr-2">Identified Tags:</span>
+                      {result.advanced.virustotal.tags?.map((tag, i) => (
+                        <span key={`tag-${i}`} className="text-xs font-mono px-2.5 py-0.5 rounded-full bg-vt-800 text-vt-accent border border-vt-700">
+                          #{tag}
+                        </span>
+                      ))}
+                      {Object.entries(result.advanced.virustotal.categories || {}).map(([catEngine, catName], i) => (
+                        <span key={`cat-${i}`} className="text-xs font-mono px-2.5 py-0.5 rounded-full bg-vt-800 text-vt-text border border-vt-700">
+                          {catEngine}: {catName}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
                   {result.advanced.virustotal.permalink && (
-                    <a
-                      href={result.advanced.virustotal.permalink}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-xs text-vt-accent hover:underline flex items-center gap-1 font-mono"
-                    >
-                      {t('res_vt_link')} &rarr;
-                    </a>
+                    <div className="pt-2">
+                      <a
+                        href={result.advanced.virustotal.permalink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs text-vt-accent hover:underline inline-flex items-center gap-1 font-mono"
+                      >
+                        {t('res_vt_link')} &rarr;
+                      </a>
+                    </div>
                   )}
                 </div>
               ) : (
-                <p className="text-xs text-vt-text leading-relaxed">
-                  {t(result.advanced.virustotal.summary || t('res_vt_no_stats'))}
-                </p>
+                <div className="space-y-1">
+                  <p className="text-xs text-vt-text leading-relaxed">
+                    {t(result.advanced.virustotal.summary || t('res_vt_no_stats'))}
+                  </p>
+                  {result.advanced.virustotal.error && (
+                    <p className="text-[11px] font-mono text-red-400/90 bg-red-950/40 p-2 rounded border border-red-800/40">
+                      {result.advanced.virustotal.error}
+                    </p>
+                  )}
+                </div>
               )}
             </div>
           </div>

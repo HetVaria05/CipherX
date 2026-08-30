@@ -1,32 +1,82 @@
+import asyncio
+import logging
+from typing import Any, Dict, List, Optional
+
 from .detector import analyze_url
-from .network_intel import collect_network_intel
+from .network_intel import collect_network_intel, collect_network_intel_async
 from .risk import classify
 from .signals import make_signal
 from .url_utils import normalize_url
 from .virustotal import scan_url_report
 
+logger = logging.getLogger(__name__)
 
-def advanced_analyze_url(
+
+async def advanced_analyze_url(
     url: str,
     virustotal_api_key: str | None = None,
     use_virustotal: bool = True,
     submit_to_virustotal: bool = False,
     include_network: bool = True,
 ) -> dict:
-    base_analysis = analyze_url(url)
+    # 1. Run base heuristic, ML & threat intel scan
+    base_analysis = await analyze_url(url, include_network=False)
     normalized = normalize_url(base_analysis["normalized_url"])
 
-    virustotal = (
+    # 2. Concurrently fetch VirusTotal and Network Intel with graceful error handling
+    vt_coro = (
         scan_url_report(base_analysis["normalized_url"], virustotal_api_key, submit_to_virustotal)
         if use_virustotal
-        else {"enabled": False, "status": "disabled", "summary": "VirusTotal lookup disabled for this request."}
+        else None
     )
-    network = (
-        collect_network_intel(normalized)
+    net_coro = (
+        collect_network_intel_async(normalized)
         if include_network
-        else {"status": "disabled", "summary": "Network enrichment disabled for this request."}
+        else None
     )
 
+    tasks = []
+    task_keys = []
+    if vt_coro:
+        tasks.append(vt_coro)
+        task_keys.append("virustotal")
+    if net_coro:
+        tasks.append(net_coro)
+        task_keys.append("network")
+
+    results_map = {}
+    if tasks:
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for key, res in zip(task_keys, results):
+            if isinstance(res, Exception):
+                logger.warning(f"Advanced scan sub-task {key} failed: {res}")
+                results_map[key] = {
+                    "status": "error",
+                    "summary": f"{key.capitalize()} scan encountered a transient error.",
+                    "error": str(res),
+                }
+            else:
+                results_map[key] = res
+
+    virustotal = results_map.get(
+        "virustotal",
+        (
+            {"enabled": False, "status": "disabled", "summary": "VirusTotal lookup disabled for this request."}
+            if not use_virustotal
+            else {"status": "error", "summary": "VirusTotal lookup unavailable."}
+        ),
+    )
+
+    network = results_map.get(
+        "network",
+        (
+            {"status": "disabled", "summary": "Network enrichment disabled for this request."}
+            if not include_network
+            else {"status": "error", "summary": "Network intel unavailable."}
+        ),
+    )
+
+    # 3. Aggregate advanced external signals
     advanced_signals = _advanced_signals(virustotal, network)
     all_signals = base_analysis["signals"] + advanced_signals
     risk_score = _combined_score(base_analysis["risk_score"], advanced_signals)
@@ -47,7 +97,51 @@ def advanced_analyze_url(
             "signals": advanced_signals,
         },
         "explanation": _advanced_explanation(base_analysis, virustotal, advanced_signals, classification),
+        "scan_duration_ms": base_analysis.get("scan_duration_ms"),
     }
+
+
+def advanced_analyze_url_sync(
+    url: str,
+    virustotal_api_key: str | None = None,
+    use_virustotal: bool = True,
+    submit_to_virustotal: bool = False,
+    include_network: bool = True,
+) -> dict:
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                return pool.submit(
+                    asyncio.run,
+                    advanced_analyze_url(
+                        url,
+                        virustotal_api_key,
+                        use_virustotal,
+                        submit_to_virustotal,
+                        include_network,
+                    ),
+                ).result()
+        return loop.run_until_complete(
+            advanced_analyze_url(
+                url,
+                virustotal_api_key,
+                use_virustotal,
+                submit_to_virustotal,
+                include_network,
+            )
+        )
+    except Exception:
+        return asyncio.run(
+            advanced_analyze_url(
+                url,
+                virustotal_api_key,
+                use_virustotal,
+                submit_to_virustotal,
+                include_network,
+            )
+        )
 
 
 def _advanced_signals(virustotal: dict, network: dict) -> list[dict]:
@@ -177,3 +271,4 @@ def _advanced_explanation(base_analysis: dict, virustotal: dict, advanced_signal
     if virustotal.get("status") == "missing_api_key":
         return f"Advanced enrichment ran without VirusTotal; base result remains {base_analysis['classification']}."
     return f"Advanced enrichment found no stronger external evidence; base result remains {base_analysis['classification']}."
+

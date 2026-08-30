@@ -54,6 +54,67 @@ export const fetchStats = async () => {
 };
 
 export const checkHealth = async () => {
-  const response = await apiClient.get('/health');
-  return response.data;
+  try {
+    const response = await apiClient.get('/health');
+    return response.data;
+  } catch (error) {
+    console.error('Health check failed:', error);
+    return { status: 'error', service: 'CipherX API', database: 'unavailable' };
+  }
 };
+
+export const signIn = async (email, password) => {
+  try {
+    const response = await apiClient.post('/auth/signin', { email, password });
+    return response.data;
+  } catch (error) {
+    if (error.response && error.response.data) {
+      throw new Error(error.response.data.detail || 'Sign in failed.');
+    }
+    throw new Error('Network error. Unable to reach authentication service.');
+  }
+};
+
+export const signUp = async (email, password, fullName) => {
+  try {
+    const response = await apiClient.post('/auth/signup', {
+      email,
+      password,
+      full_name: fullName,
+    });
+    return response.data;
+  } catch (error) {
+    if (error.response && error.response.data) {
+      throw new Error(error.response.data.detail || 'Sign up failed.');
+    }
+    throw new Error('Network error. Unable to reach registration service.');
+  }
+};
+
+export const signInWithGoogle = async ({ email, fullName, avatarUrl, googleId }) => {
+  try {
+    const response = await apiClient.post('/auth/google', {
+      email,
+      full_name: fullName,
+      avatar_url: avatarUrl,
+      google_id: googleId,
+    });
+    return response.data;
+  } catch (error) {
+    if (error.response && error.response.data) {
+      throw new Error(error.response.data.detail || 'Google sign in failed.');
+    }
+    throw new Error('Network error. Unable to complete Google authentication.');
+  }
+};
+
+export const fetchUserQuota = async (userId) => {
+  try {
+    const response = await apiClient.get(`/user/quota?user_id=${encodeURIComponent(userId || 'guest_user')}`);
+    return response.data;
+  } catch (error) {
+    console.error('Failed to fetch user quota:', error);
+    return { used: 0, total: 3, remaining: 3 };
+  }
+};
+
